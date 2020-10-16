@@ -1,2 +1,2 @@
-# Team 2
+# LoRa-AQM
 
