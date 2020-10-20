@@ -131,6 +131,7 @@ int r_recv() {
       case ',':
         if (p == 0 && r_buf[i - 1] != l_addr) {
           memset(&r_buf, 0, sizeof(r_buf));
+          delay(20);
           while (Radio.available()) Radio.read();
           return 0;
         }

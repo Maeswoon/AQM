@@ -15,8 +15,8 @@ MainWindow::~MainWindow()
 
 
 int MainWindow::init_comms() {
-    s_port = CreateFileA("\\\\.\\COM9", GENERIC_READ | GENERIC_WRITE,
-        0, NULL, OPEN_EXISTING, 0, NULL);
+    s_port = CreateFile("\\\\.\\COM9", GENERIC_READ | GENERIC_WRITE,
+        0, NULL, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, NULL);
     if (s_port == INVALID_HANDLE_VALUE) return -1;
 
     DCB dcb_params = { 0 };
@@ -43,6 +43,7 @@ int MainWindow::s_send(char buf[]) {
 int MainWindow::s_recv() {
     DWORD bytes_read;
     memset(&(this->s_buf), 0, sizeof(this->s_buf));
+    memset(&(this->payload), 0, sizeof(this->payload));
     char p_cont[16], temp_char;
     int i = 0, j = 0, p = 0;
 
@@ -62,21 +63,20 @@ int MainWindow::s_recv() {
                 break;
             default:
                 p_cont[j++] = temp_char;
-                ++i;
+                this->s_buf[i++] = temp_char;
                 break;
         }
 
-        ++i;
-    } while (bytes_read > 0 && i < 255);
+    } while (bytes_read > 0 && temp_char != '\n');
 
-    return 0;
+    return 1;
 }
 
 void MainWindow::proc_telem() {
     this->b.roll = this->payload[4];
     this->b.pitch = this->payload[3];
-    this->last_recv = this->payload[2];
-    sprintf_s(this->s_buf, "Temp: %d\nHumidity: %d\nRoll: %d\nPitch: %d", (int) this->payload[5],
+    this->last_recv = (int) this->payload[2];
+    sprintf(this->s_buf, "Temp: %d\nHumidity: %d\nRoll: %d\nPitch: %d", (int) this->payload[5],
                 (int) this->payload[6], (int) this->payload[4], (int) this->payload[3]);
     this->output->setText(this->s_buf);
 }

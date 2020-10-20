@@ -41,7 +41,6 @@ int s_recv() {
   while (Serial.available()) {
     char x = Serial.read();
     Radio.write(x);
-    Serial.write(x);
   }
   return 1;
 }
@@ -61,6 +60,7 @@ int r_recv() {
       case ',':
         if (p == 0 && r_buf[i - 1] != l_addr) {
           memset(&r_buf, 0, sizeof(r_buf));
+          delay(10);
           while (Radio.available()) Radio.read();
           return 0;
         }

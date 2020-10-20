@@ -1,14 +1,12 @@
 #include "mainwindow.h"
 
 #include <QApplication>
+#define _CRT_SECURE_NO_WARNINGS
 
-static std::string q;
-static char *qc;
-static const char nl = '\n';
-static const char gt = '>';
+int q;
+char *qc = (char *) malloc(16);
 
-int main(int argc, char *argv[])
-{
+int main(int argc, char *argv[]) {
     QApplication a(argc, argv);
     MainWindow w;
 
@@ -21,26 +19,26 @@ int main(int argc, char *argv[])
     font.setPointSize(16);
     font.setBold(true);
     w.output->setFont(font);
+    w.output->setText("Loading...");
+    w.output->show();
+
 
     std::function<void()> f = [&w]() {
         if (w.last_recv == w.last_sent) {
-            q = std::to_string(rand() % 255);
-            strcpy(qc, "<1,0,");
-            strcat(qc, const_cast<char *>(q.c_str()));
-            strcat(qc, &gt);
-            strcat(qc, &nl);
-            w.last_sent = std::stod(q);
+            q = rand() % 255;
+            sprintf_s(qc, 16, "<1,0,%d>\n", q);
+            w.last_sent = q;
             w.s_send(qc);
         }
 
-        while(w.s_recv() == 0) w.proc_telem();
+        if (w.s_recv() > 0) w.proc_telem();
 
         return;
     };
 
     QTimer *timer = new QTimer(&w);
     QTimer::connect(timer, &QTimer::timeout, f);
-    timer->start(500);
+    timer->start(200);
 
     w.show();
     return a.exec();

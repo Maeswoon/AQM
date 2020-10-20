@@ -59,8 +59,8 @@ public:
     void proc_telem();
     char s_buf[256];
     double payload[7];
-    double last_sent = 0.0;
-    double last_recv = 0.0;
+    int last_sent = 0;
+    int last_recv = 0;
     bearing b{0.0, 0.0, 0.0};
     QLabel *output;
 
