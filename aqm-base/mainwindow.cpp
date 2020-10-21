@@ -1,16 +1,31 @@
 #include "mainwindow.h"
 #include "./ui_mainwindow.h"
 
-MainWindow::MainWindow(QWidget *parent)
-    : QMainWindow(parent)
-    , ui(new Ui::MainWindow)
-{
+MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent), ui(new Ui::MainWindow) {
     ui->setupUi(this);
+    last_sent = 0;
+    last_recv = 0;
+    timer = new QTimer(this);
+    timer->setInterval(200);
+    this->connect(timer, SIGNAL(timeout()), this, SLOT(comm_loop()));
+    qc = (char *) malloc(16);
+    send_flag = true;
 }
 
-MainWindow::~MainWindow()
-{
+MainWindow::~MainWindow() {
     delete ui;
+}
+
+void MainWindow::comm_loop() {
+    if (send_flag) {
+        q = rand() % 255;
+        sprintf_s(qc, 16, "<1,0,%d>\n", q);
+        last_sent = q;
+        s_send(qc);
+        send_flag = false;
+    }
+
+    if (s_recv() > 0) proc_telem();
 }
 
 
@@ -35,15 +50,15 @@ int MainWindow::init_comms() {
 int MainWindow::s_send(char buf[]) {
     DWORD bytes_written = 0;
 
-    if(!WriteFile(s_port, buf, strlen(buf), &bytes_written, NULL)) return -1;
+    if (!WriteFile(s_port, buf, strlen(buf), &bytes_written, NULL)) return -1;
 
     return bytes_written;
 }
 
 int MainWindow::s_recv() {
     DWORD bytes_read;
-    memset(&(this->s_buf), 0, sizeof(this->s_buf));
-    memset(&(this->payload), 0, sizeof(this->payload));
+    memset(&(s_buf), 0, sizeof(s_buf));
+    memset(&(payload), 0, sizeof(payload));
     char p_cont[16], temp_char;
     int i = 0, j = 0, p = 0;
 
@@ -52,10 +67,11 @@ int MainWindow::s_recv() {
 
         switch (temp_char) {
             case '\n':
+                send_flag = true;
                 return 1;
             case '>':
             case ',':
-                this->payload[p++] = std::stod(p_cont);
+                payload[p++] = std::stod(p_cont);
                 memset(&p_cont, 0, sizeof(p_cont));
                 j = 0;
                 break;
@@ -63,7 +79,7 @@ int MainWindow::s_recv() {
                 break;
             default:
                 p_cont[j++] = temp_char;
-                this->s_buf[i++] = temp_char;
+                s_buf[i++] = temp_char;
                 break;
         }
 
@@ -73,12 +89,12 @@ int MainWindow::s_recv() {
 }
 
 void MainWindow::proc_telem() {
-    this->b.roll = this->payload[4];
-    this->b.pitch = this->payload[3];
-    this->last_recv = (int) this->payload[2];
-    sprintf(this->s_buf, "Temp: %d\nHumidity: %d\nRoll: %d\nPitch: %d", (int) this->payload[5],
-                (int) this->payload[6], (int) this->payload[4], (int) this->payload[3]);
-    this->output->setText(this->s_buf);
+    b.roll = payload[4];
+    b.pitch = payload[3];
+    last_recv = (int) payload[2];
+    sprintf(s_buf, "Temp: %d\nHumidity: %d\nRoll: %d\nPitch: %d", (int) payload[5],
+                (int) payload[6], (int) payload[4], (int) payload[3]);
+    output->setText(s_buf);
 }
 
 long double gc_dist(long double a_lat, long double b_lat,

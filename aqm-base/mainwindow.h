@@ -46,26 +46,33 @@ struct coord {
     }
 };
 
-class MainWindow : public QMainWindow
-{
+class MainWindow : public QMainWindow {
     Q_OBJECT
 
-public:
-    MainWindow(QWidget *parent = nullptr);
-    ~MainWindow();
-    int init_comms();
-    int s_recv();
-    int s_send(char buf[]);
-    void proc_telem();
-    char s_buf[256];
-    double payload[7];
-    int last_sent = 0;
-    int last_recv = 0;
-    bearing b{0.0, 0.0, 0.0};
-    QLabel *output;
+    public:
+        MainWindow(QWidget *parent = nullptr);
+        ~MainWindow();
+        int init_comms();
+        QLabel *output;
+        QTimer *timer;
 
-private:
-    HANDLE s_port;
-    Ui::MainWindow *ui;
+    private slots:
+        void comm_loop();
+
+    private:
+        HANDLE s_port;
+        Ui::MainWindow *ui;
+        int q;
+        int s_recv();
+        int s_send(char buf[]);
+        void proc_telem();
+        char s_buf[256];
+        double payload[7];
+        bearing b{0.0, 0.0, 0.0};
+        int last_sent;
+        int last_recv;
+        char *qc;
+        bool send_flag;
+
 };
 #endif // MAINWINDOW_H
