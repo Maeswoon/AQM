@@ -16,7 +16,6 @@ int main(int argc, char *argv[]) {
     font.setPointSize(16);
     font.setBold(true);
     w.output->setFont(font);
-    w.output->setText("Loading...");
     w.output->show();
 
     w.timer->start();

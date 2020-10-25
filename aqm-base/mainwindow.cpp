@@ -1,42 +1,140 @@
 #include "mainwindow.h"
 #include "./ui_mainwindow.h"
 
+#define ROLL_INC 0.5
+#define PITCH_INC 0.5
+#define YAW_INC 0.5
+#define INC_INT 100
+#define REFRESH 200
+#define TIMEOUT 500
+
 MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent), ui(new Ui::MainWindow) {
     ui->setupUi(this);
-    last_sent = 0;
-    last_recv = 0;
-    timer = new QTimer(this);
-    timer->setInterval(200);
-    this->connect(timer, SIGNAL(timeout()), this, SLOT(comm_loop()));
-    qc = (char *) malloc(16);
+
+    qc = (char *) malloc(32);
     send_flag = true;
+
+    timer = new QTimer(this);
+    timer->setInterval(REFRESH);
+    this->connect(timer, SIGNAL(timeout()), this, SLOT(comm_loop()));
+
+    reconnect_timeout = new QTimer(this);
+    reconnect_timeout->setInterval(TIMEOUT);
+    //this->connect(reconnect_timeout, SIGNAL(timeout()), this, SLOT(reconnect()));
+
+    pitch_inc = new QTimer(this);
+    pitch_inc->setInterval(INC_INT);
+    pitch_dec = new QTimer(this);
+    pitch_dec->setInterval(INC_INT);
+    this->connect(pitch_inc, SIGNAL(timeout()), this, SLOT(inc_pitch()));
+    this->connect(pitch_dec, SIGNAL(timeout()), this, SLOT(dec_pitch()));
+
+    roll_inc = new QTimer(this);
+    roll_inc->setInterval(INC_INT);
+    roll_dec = new QTimer(this);
+    roll_dec->setInterval(INC_INT);
+    this->connect(roll_inc, SIGNAL(timeout()), this, SLOT(inc_roll()));
+    this->connect(roll_dec, SIGNAL(timeout()), this, SLOT(dec_roll()));
+
+    yaw_inc = new QTimer(this);
+    yaw_inc->setInterval(INC_INT);
+    yaw_dec = new QTimer(this);
+    yaw_dec->setInterval(INC_INT);
+    this->connect(yaw_inc, SIGNAL(timeout()), this, SLOT(inc_yaw()));
+    this->connect(yaw_dec, SIGNAL(timeout()), this, SLOT(dec_yaw()));
+
+    last_recv = GetTickCount();
 }
 
 MainWindow::~MainWindow() {
     delete ui;
 }
 
+void MainWindow::keyPressEvent(QKeyEvent *event) {
+    switch (event->key()) {
+        case Qt::Key_W:
+            inc_pitch();
+            pitch_inc->start();
+            break;
+        case Qt::Key_S:
+            dec_pitch();
+            pitch_dec->start();
+            break;
+        case Qt::Key_A:
+            dec_roll();
+            roll_dec->start();
+            break;
+        case Qt::Key_D:
+            inc_roll();
+            roll_inc->start();
+        case Qt::Key_Q:
+            dec_yaw();
+            yaw_dec->start();
+            break;
+        case Qt::Key_E:
+            inc_yaw();
+            yaw_inc->start();
+    }
+}
+
+void MainWindow::keyReleaseEvent(QKeyEvent *event) {
+    switch (event->key()) {
+        case Qt::Key_W:
+            pitch_inc->stop();
+            break;
+        case Qt::Key_S:
+            pitch_dec->stop();
+            break;
+        case Qt::Key_A:
+            roll_dec->stop();
+            break;
+        case Qt::Key_D:
+            roll_inc->stop();
+        case Qt::Key_Q:
+            yaw_dec->stop();
+            break;
+        case Qt::Key_E:
+            yaw_inc->stop();
+    }
+}
+
+void MainWindow::inc_pitch() { exp.pitch += PITCH_INC; }
+
+void MainWindow::dec_pitch() { exp.pitch -= PITCH_INC; }
+
+void MainWindow::inc_roll() { exp.roll += ROLL_INC; }
+
+void MainWindow::dec_roll() { exp.roll -= ROLL_INC; }
+
+void MainWindow::inc_yaw() { exp.yaw += YAW_INC; }
+
+void MainWindow::dec_yaw() { exp.yaw -= YAW_INC; }
+
 void MainWindow::comm_loop() {
-    if (send_flag) {
-        q = rand() % 255;
-        sprintf_s(qc, 16, "<1,0,%d>\n", q);
-        last_sent = q;
+    if (send_flag == true || GetTickCount() - last_recv > TIMEOUT) {
+        sprintf_s(qc, 32, "<1,0>\n");
         s_send(qc);
         send_flag = false;
+        last_recv = GetTickCount();
     }
 
     if (s_recv() > 0) proc_telem();
 }
 
+void MainWindow::reconnect() {
+    sprintf_s(qc, 32, "<1,0>\n");
+    s_send(qc);
+}
 
 int MainWindow::init_comms() {
     s_port = CreateFile("\\\\.\\COM9", GENERIC_READ | GENERIC_WRITE,
         0, NULL, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, NULL);
     if (s_port == INVALID_HANDLE_VALUE) return -1;
 
-    DCB dcb_params = { 0 };
-    dcb_params.DCBlength = sizeof(dcb_params);
-    dcb_params.BaudRate = CBR_9600;
+    DCB dcb_params;
+    SecureZeroMemory(&dcb_params, sizeof(DCB));
+    dcb_params.DCBlength = sizeof(DCB);
+    dcb_params.BaudRate = CBR_56000;
     dcb_params.ByteSize = 8;
     dcb_params.StopBits = ONESTOPBIT;
     dcb_params.Parity = NOPARITY;
@@ -85,15 +183,14 @@ int MainWindow::s_recv() {
 
     } while (bytes_read > 0 && temp_char != '\n');
 
-    return 1;
+    return 0;
 }
 
 void MainWindow::proc_telem() {
-    b.roll = payload[4];
-    b.pitch = payload[3];
-    last_recv = (int) payload[2];
-    sprintf(s_buf, "Temp: %d\nHumidity: %d\nRoll: %d\nPitch: %d", (int) payload[5],
-                (int) payload[6], (int) payload[4], (int) payload[3]);
+    act.roll = payload[3];
+    act.pitch = payload[2];
+    sprintf(s_buf, "Temp: %d\nHumidity: %d%%\nRoll: %.1f\nPitch: %.1f\nRoll (exp.): %.1f\nPitch (exp.): %.1f\nRTT: %lu",
+            (int) payload[4], (int) payload[5], act.roll, act.pitch, exp.roll, exp.pitch, GetTickCount() - last_recv);
     output->setText(s_buf);
 }
 

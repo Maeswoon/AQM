@@ -3,6 +3,7 @@
 #define _USE_MATH_DEFINES
 
 #include <QMainWindow>
+#include <QKeyEvent>
 #include <QTimer>
 #include <QLabel>
 #include <windows.h>
@@ -55,9 +56,22 @@ class MainWindow : public QMainWindow {
         int init_comms();
         QLabel *output;
         QTimer *timer;
+        QTimer *reconnect_timeout;
+        QTimer *roll_inc, *roll_dec;
+        QTimer *yaw_inc, *yaw_dec;
+        QTimer *pitch_inc, *pitch_dec;
+        void keyPressEvent(QKeyEvent *event);
+        void keyReleaseEvent(QKeyEvent *event);        
 
     private slots:
         void comm_loop();
+        void reconnect();
+        void inc_roll();
+        void dec_roll();
+        void inc_pitch();
+        void dec_pitch();
+        void inc_yaw();
+        void dec_yaw();
 
     private:
         HANDLE s_port;
@@ -68,9 +82,9 @@ class MainWindow : public QMainWindow {
         void proc_telem();
         char s_buf[256];
         double payload[7];
-        bearing b{0.0, 0.0, 0.0};
-        int last_sent;
-        int last_recv;
+        DWORD last_recv;
+        bearing act{0.0, 0.0, 0.0};
+        bearing exp{0.0, 0.0, 0.0};
         char *qc;
         bool send_flag;
 
