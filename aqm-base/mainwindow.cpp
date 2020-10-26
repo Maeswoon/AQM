@@ -6,7 +6,7 @@
 #define YAW_INC 0.5
 #define INC_INT 100
 #define REFRESH 200
-#define TIMEOUT 500
+#define S_TIMEOUT 500
 
 MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent), ui(new Ui::MainWindow) {
     ui->setupUi(this);
@@ -19,7 +19,7 @@ MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent), ui(new Ui::MainWi
     this->connect(timer, SIGNAL(timeout()), this, SLOT(comm_loop()));
 
     reconnect_timeout = new QTimer(this);
-    reconnect_timeout->setInterval(TIMEOUT);
+    reconnect_timeout->setInterval(S_TIMEOUT);
     //this->connect(reconnect_timeout, SIGNAL(timeout()), this, SLOT(reconnect()));
 
     pitch_inc = new QTimer(this);
@@ -43,7 +43,7 @@ MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent), ui(new Ui::MainWi
     this->connect(yaw_inc, SIGNAL(timeout()), this, SLOT(inc_yaw()));
     this->connect(yaw_dec, SIGNAL(timeout()), this, SLOT(dec_yaw()));
 
-    last_recv = GetTickCount();
+    last_send = GetTickCount();
 }
 
 MainWindow::~MainWindow() {
@@ -111,13 +111,17 @@ void MainWindow::inc_yaw() { exp.yaw += YAW_INC; }
 void MainWindow::dec_yaw() { exp.yaw -= YAW_INC; }
 
 void MainWindow::comm_loop() {
-    if (send_flag == true || GetTickCount() - last_recv > TIMEOUT) {
+    if (GetTickCount() - last_send > S_TIMEOUT) {
+        sprintf(s_buf, "TIMEOUT %lu", GetTickCount() - last_send);
+        output->setText(s_buf);
+    }
+    if (send_flag == true || GetTickCount() - last_send > S_TIMEOUT) {
         sprintf_s(qc, 32, "<1,0>\n");
         s_send(qc);
         send_flag = false;
-        last_recv = GetTickCount();
-    }
+        last_send = GetTickCount();
 
+    }
     if (s_recv() > 0) proc_telem();
 }
 
@@ -138,6 +142,15 @@ int MainWindow::init_comms() {
     dcb_params.ByteSize = 8;
     dcb_params.StopBits = ONESTOPBIT;
     dcb_params.Parity = NOPARITY;
+
+    COMMTIMEOUTS timeouts;
+    timeouts.ReadIntervalTimeout = MAXDWORD;
+    timeouts.ReadTotalTimeoutMultiplier = MAXDWORD;
+    timeouts.ReadTotalTimeoutConstant = S_TIMEOUT;
+    timeouts.WriteTotalTimeoutMultiplier = 0;
+    timeouts.WriteTotalTimeoutConstant = 0;
+
+    if (!SetCommTimeouts(s_port, &timeouts)) return -1;
 
     SetCommState(s_port, &dcb_params);
     SetCommMask(s_port, EV_RXCHAR | EV_ERR);
@@ -161,8 +174,9 @@ int MainWindow::s_recv() {
     int i = 0, j = 0, p = 0;
 
     do {
-        ReadFile(s_port, &temp_char, sizeof(temp_char), &bytes_read, NULL);
+        ReadFile(s_port, &temp_char, 1, &bytes_read, NULL);
 
+        if (bytes_read < 1) return 0;
         switch (temp_char) {
             case '\n':
                 send_flag = true;
@@ -171,9 +185,11 @@ int MainWindow::s_recv() {
             case ',':
                 payload[p++] = std::stod(p_cont);
                 memset(&p_cont, 0, sizeof(p_cont));
+                s_buf[i++] = temp_char;
                 j = 0;
                 break;
             case '<':
+                s_buf[i++] = temp_char;
                 break;
             default:
                 p_cont[j++] = temp_char;
@@ -181,7 +197,7 @@ int MainWindow::s_recv() {
                 break;
         }
 
-    } while (bytes_read > 0 && temp_char != '\n');
+    } while (temp_char != '\n');
 
     return 0;
 }
@@ -189,8 +205,8 @@ int MainWindow::s_recv() {
 void MainWindow::proc_telem() {
     act.roll = payload[3];
     act.pitch = payload[2];
-    sprintf(s_buf, "Temp: %d\nHumidity: %d%%\nRoll: %.1f\nPitch: %.1f\nRoll (exp.): %.1f\nPitch (exp.): %.1f\nRTT: %lu",
-            (int) payload[4], (int) payload[5], act.roll, act.pitch, exp.roll, exp.pitch, GetTickCount() - last_recv);
+    sprintf(s_buf, "Temp: %d C\nHumidity: %d%%\nRoll: %.1fdeg\nPitch: %.1fdeg\nRoll (exp.): %.1fdeg\nPitch (exp.): %.1fdeg\nRTT: %lums",
+            (int) payload[4], (int) payload[5], act.roll, act.pitch, exp.roll, exp.pitch, GetTickCount() - last_send);
     output->setText(s_buf);
 }
 

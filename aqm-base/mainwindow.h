@@ -82,7 +82,7 @@ class MainWindow : public QMainWindow {
         void proc_telem();
         char s_buf[256];
         double payload[7];
-        DWORD last_recv;
+        DWORD last_send;
         bearing act{0.0, 0.0, 0.0};
         bearing exp{0.0, 0.0, 0.0};
         char *qc;

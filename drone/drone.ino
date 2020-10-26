@@ -87,7 +87,6 @@ void loop(){
       sP += pS[i] / 3.0;
     }
     if (++k == 3) k = 0;
-    delay(5);
   }
   if (r_recv() > 0) r_send(dst);
 }

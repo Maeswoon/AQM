@@ -7,7 +7,7 @@ int main(int argc, char *argv[]) {
     QApplication a(argc, argv);
     MainWindow w;
 
-    w.init_comms();
+    if (w.init_comms() < 0) return -1;
     w.setFixedSize(300, 200);
 
     w.output = new QLabel(&w);

@@ -29,8 +29,8 @@ void setup(){
 }
 
 void loop(){
-  while(s_recv() == 0) delay(1);
-  while(r_recv() == 0 && millis() - t < TIMEOUT) delay(1);
+  while (s_recv() == 0) delay(1);
+  while (r_recv() == 0 && millis() - t < TIMEOUT) delay(1);
 }
 
 int s_recv() {
@@ -51,9 +51,9 @@ int s_recv() {
 
 int r_recv() {
   if (!Radio.available()) return 0;
-  if (millis() - st >= S_TIMEOUT) return 1;
   while (Serial.available()) Serial.read();
   int i = 0, j = 0, p = 0;
+  bool msg_start = false;
   char p_cont[16];
   char temp_char = '0';
   memset(&r_buf, 0, sizeof(r_buf));
@@ -62,32 +62,38 @@ int r_recv() {
   while (millis() - rt < R_TIMEOUT && temp_char != '\n') {
     if (Radio.available()) {
       temp_char = Radio.read();
-      switch (temp_char) {
-        case '>':
-        case ',':
-          if (p == 0 && r_buf[i - 1] != l_addr) {
-            memset(&r_buf, 0, sizeof(r_buf));
-            delay(10);
-            while (Radio.available()) Radio.read();
-            return 0;
-          }
-          strcpy(r_payload[p++], p_cont);
-          memset(&p_cont, 0, sizeof(p_cont));
-          r_buf[i++] = temp_char;
-          j = 0;   
-          break;
-        case '\n':
-        case '<':
-          r_buf[i++] = temp_char;
-          break;
-        default:
-          p_cont[j++] = temp_char;
-          r_buf[i++] = temp_char;
-          break;
-      }
+      if (msg_start == true || temp_char == '<') {
+         switch (temp_char) {
+          case '>':
+          case ',':
+            if (p == 0 && r_buf[i - 1] != l_addr) {
+              memset(&r_buf, 0, sizeof(r_buf));
+              delay(20);
+              while (Radio.available()) Radio.read();
+              return 0;
+            }
+            strcpy(r_payload[p++], p_cont);
+            memset(&p_cont, 0, sizeof(p_cont));
+            r_buf[i++] = temp_char;
+            j = 0;   
+            break;
+          case '\n':
+          case '<':
+            msg_start = true;
+            r_buf[i++] = temp_char;
+            break;
+          default:
+            p_cont[j++] = temp_char;
+            r_buf[i++] = temp_char;
+            break;
+        }
+      } 
     }
   }
-  while (Radio.available()) Radio.read();
-  if (temp_char == '\n') Serial.print(r_buf);
+  if (msg_start == false) {
+    delay(20);
+    while (Radio.available()) Radio.read();
+  }
+  if (temp_char == '\n' && msg_start) Serial.print(r_buf);
   return 1;
 }
