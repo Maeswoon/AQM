@@ -5,8 +5,8 @@
 #define PITCH_INC 0.5
 #define YAW_INC 0.5
 #define INC_INT 100
-#define REFRESH 200
-#define S_TIMEOUT 500
+#define REFRESH 50
+#define S_TIMEOUT 200
 
 MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent), ui(new Ui::MainWindow) {
     ui->setupUi(this);
@@ -112,15 +112,14 @@ void MainWindow::dec_yaw() { exp.yaw -= YAW_INC; }
 
 void MainWindow::comm_loop() {
     if (GetTickCount() - last_send > S_TIMEOUT) {
-        sprintf(s_buf, "TIMEOUT %lu", GetTickCount() - last_send);
+        sprintf(s_buf, "TIMEOUT");
         output->setText(s_buf);
     }
     if (send_flag == true || GetTickCount() - last_send > S_TIMEOUT) {
-        sprintf_s(qc, 32, "<1,0>\n");
+        sprintf_s(qc, 32, "<1,0,%d,%d>\n", (int) exp.roll, (int) exp.pitch);
         s_send(qc);
         send_flag = false;
         last_send = GetTickCount();
-
     }
     if (s_recv() > 0) proc_telem();
 }

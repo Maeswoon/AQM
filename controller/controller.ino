@@ -1,3 +1,5 @@
+#include <SPI.h>
+#include "LoRa.h"
 #include <dht11.h>
 #include <math.h>
 
@@ -8,8 +10,10 @@
 #define R_TIMEOUT 100
 
 char r_payload[8][16];
-char s_buf[256], r_buf[256];
+char l_payload[8][16];
+char s_buf[256], r_buf[256], l_buf[256];
 
+bool autonomous = false;
 char l_addr = '0';
 long t, rt, st;
 
@@ -29,8 +33,9 @@ void setup(){
 }
 
 void loop(){
-  while (s_recv() == 0) delay(1);
-  while (r_recv() == 0 && millis() - t < TIMEOUT) delay(1);
+  while (!autonomous && s_recv() == 0) delay(1);
+  while (!autonomous && r_recv() == 0 && millis() - t < TIMEOUT) delay(1);
+  while (autonomous && l_recv() == 0) delay(1);
 }
 
 int s_recv() {
@@ -59,11 +64,14 @@ int r_recv() {
   memset(&r_buf, 0, sizeof(r_buf));
   memset(&r_payload, 0, sizeof(r_payload));
   rt = millis();
-  while (millis() - rt < R_TIMEOUT && temp_char != '\n') {
+  while (temp_char != '\n' && millis() - r < RECV_TIMEOUT) {
     if (Radio.available()) {
       temp_char = Radio.read();
-      if (msg_start == true || temp_char == '<') {
-         switch (temp_char) {
+      if (msg_start == true || temp_char == '<' || temp_char == 'A') {
+        switch (temp_char) {
+          case 'A':
+            autonomous = true;
+            return 0;
           case '>':
           case ',':
             if (p == 0 && r_buf[i - 1] != l_addr) {
@@ -87,7 +95,7 @@ int r_recv() {
             r_buf[i++] = temp_char;
             break;
         }
-      } 
+      }
     }
   }
   if (msg_start == false) {
@@ -96,4 +104,38 @@ int r_recv() {
   }
   if (temp_char == '\n' && msg_start) Serial.print(r_buf);
   return 1;
+}
+
+int l_recv() {
+  if (LoRa.parsePacket() == 0) return 0;
+  int i = 0, j = 0, p = 0;
+  bool msg_start = false;
+  char p_cont[16];
+  char temp_char = '0';
+  memset(&l_buf, 0, sizeof(l_buf));
+  memset(&l_payload, 0, sizeof(l_payload));
+  while (LoRa.available() && temp_char != '\n') {
+    temp_char = LoRa.read();
+    if (msg_start == true || temp_char == '<' || temp_char == 'A') {
+       switch (temp_char) {
+        case '>':
+        case ',':
+          strcpy(l_payload[p++], p_cont);
+          memset(&p_cont, 0, sizeof(p_cont));
+          l_buf[i++] = temp_char;
+          j = 0;   
+          break;
+        case '\n':
+        case '<':
+          msg_start = true;
+          l_buf[i++] = temp_char;
+          break;
+        default:
+          p_cont[j++] = temp_char;
+          l_buf[i++] = temp_char;
+          break;
+      }
+    } 
+  }
+  if (msg_start) Serial.print(l_buf);
 }

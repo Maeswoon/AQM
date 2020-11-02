@@ -8,10 +8,10 @@ int main(int argc, char *argv[]) {
     MainWindow w;
 
     if (w.init_comms() < 0) return -1;
-    w.setFixedSize(300, 200);
 
+    w.setFixedSize(400, 300);
     w.output = new QLabel(&w);
-    w.output->setFixedSize(300, 200);
+    w.output->setFixedSize(400, 300);
     QFont font = w.output->font();
     font.setPointSize(16);
     font.setBold(true);
