@@ -5,15 +5,27 @@
 #define LORA_H
 
 #include <Arduino.h>
-#undef max
-#undef min
 #include <SPI.h>
 
+#if defined(ARDUINO_SAMD_MKRWAN1300)
 #define LORA_DEFAULT_SPI           SPI1
 #define LORA_DEFAULT_SPI_FREQUENCY 200000
 #define LORA_DEFAULT_SS_PIN        LORA_IRQ_DUMB
 #define LORA_DEFAULT_RESET_PIN     -1
 #define LORA_DEFAULT_DIO0_PIN      -1
+#elif defined(ARDUINO_SAMD_MKRWAN1310)
+#define LORA_DEFAULT_SPI           SPI1
+#define LORA_DEFAULT_SPI_FREQUENCY 200000
+#define LORA_DEFAULT_SS_PIN        LORA_IRQ_DUMB
+#define LORA_DEFAULT_RESET_PIN     -1
+#define LORA_DEFAULT_DIO0_PIN      LORA_IRQ
+#else
+#define LORA_DEFAULT_SPI           SPI
+#define LORA_DEFAULT_SPI_FREQUENCY 8E6 
+#define LORA_DEFAULT_SS_PIN        10
+#define LORA_DEFAULT_RESET_PIN     9
+#define LORA_DEFAULT_DIO0_PIN      2
+#endif
 
 #define PA_OUTPUT_RFO_PIN          0
 #define PA_OUTPUT_PA_BOOST_PIN     1
@@ -43,6 +55,12 @@ public:
   virtual int peek();
   virtual void flush();
 
+#ifndef ARDUINO_SAMD_MKRWAN1300
+  void onReceive(void(*callback)(int));
+  void onTxDone(void(*callback)());
+
+  void receive(int size = 0);
+#endif
   void idle();
   void sleep();
 

@@ -5,8 +5,6 @@
 #define LORA_H
 
 #include <Arduino.h>
-#undef max
-#undef min
 #include <SPI.h>
 
 #if defined(ARDUINO_SAMD_MKRWAN1300)

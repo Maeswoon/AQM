@@ -79,6 +79,7 @@ LoRaClass::LoRaClass() :
 
 int LoRaClass::begin(long frequency)
 {
+#if defined(ARDUINO_SAMD_MKRWAN1300) || defined(ARDUINO_SAMD_MKRWAN1310)
   pinMode(LORA_IRQ_DUMB, OUTPUT);
   digitalWrite(LORA_IRQ_DUMB, LOW);
 
@@ -93,6 +94,7 @@ int LoRaClass::begin(long frequency)
   delay(200);
   digitalWrite(LORA_RESET, HIGH);
   delay(50);
+#endif
 
   // setup pins
   pinMode(_ss, OUTPUT);
@@ -345,6 +347,60 @@ int LoRaClass::peek()
 void LoRaClass::flush()
 {
 }
+
+#ifndef ARDUINO_SAMD_MKRWAN1300
+void LoRaClass::onReceive(void(*callback)(int))
+{
+  _onReceive = callback;
+
+  if (callback) {
+    pinMode(_dio0, INPUT);
+#ifdef SPI_HAS_NOTUSINGINTERRUPT
+    SPI.usingInterrupt(digitalPinToInterrupt(_dio0));
+#endif
+    attachInterrupt(digitalPinToInterrupt(_dio0), LoRaClass::onDio0Rise, RISING);
+  } else {
+    detachInterrupt(digitalPinToInterrupt(_dio0));
+#ifdef SPI_HAS_NOTUSINGINTERRUPT
+    SPI.notUsingInterrupt(digitalPinToInterrupt(_dio0));
+#endif
+  }
+}
+
+void LoRaClass::onTxDone(void(*callback)())
+{
+  _onTxDone = callback;
+
+  if (callback) {
+    pinMode(_dio0, INPUT);
+#ifdef SPI_HAS_NOTUSINGINTERRUPT
+    SPI.usingInterrupt(digitalPinToInterrupt(_dio0));
+#endif
+    attachInterrupt(digitalPinToInterrupt(_dio0), LoRaClass::onDio0Rise, RISING);
+  } else {
+    detachInterrupt(digitalPinToInterrupt(_dio0));
+#ifdef SPI_HAS_NOTUSINGINTERRUPT
+    SPI.notUsingInterrupt(digitalPinToInterrupt(_dio0));
+#endif
+  }
+}
+
+void LoRaClass::receive(int size)
+{
+
+  writeRegister(REG_DIO_MAPPING_1, 0x00); // DIO0 => RXDONE
+
+  if (size > 0) {
+    implicitHeaderMode();
+
+    writeRegister(REG_PAYLOAD_LENGTH, size & 0xff);
+  } else {
+    explicitHeaderMode();
+  }
+
+  writeRegister(REG_OP_MODE, MODE_LONG_RANGE_MODE | MODE_RX_CONTINUOUS);
+}
+#endif
 
 void LoRaClass::idle()
 {
