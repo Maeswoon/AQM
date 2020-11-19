@@ -1,4 +1,4 @@
-#include <SPI.h>
+ #include <SPI.h>
 #include "LoRa.h"
 #include <dht11.h>
 #include <math.h>
@@ -8,6 +8,7 @@
 #define TIMEOUT 5000
 #define S_TIMEOUT 100
 #define R_TIMEOUT 100
+#define RECV_TIMEOUT 300
 
 char r_payload[8][16];
 char l_payload[8][16];
@@ -21,7 +22,7 @@ void setup(){
   pinMode(s_pin, OUTPUT);
   digitalWrite(s_pin, LOW);
   delay(100);
-  Serial.begin(56000);
+  Serial.begin(115200);
   Radio.begin(9600, SERIAL_8N1);
   delay(100);
   Radio.println("AT+P8");
@@ -29,6 +30,9 @@ void setup(){
   digitalWrite(s_pin, HIGH);
   delay(100);
   while (Radio.available()) Radio.read();
+  if (!LoRa.begin(915E6)) {
+    while (1);
+  }
   t = millis();
 }
 
@@ -64,12 +68,12 @@ int r_recv() {
   memset(&r_buf, 0, sizeof(r_buf));
   memset(&r_payload, 0, sizeof(r_payload));
   rt = millis();
-  while (temp_char != '\n' && millis() - r < RECV_TIMEOUT) {
+  while (temp_char != '\n' && millis() - rt < RECV_TIMEOUT) {
     if (Radio.available()) {
       temp_char = Radio.read();
-      if (msg_start == true || temp_char == '<' || temp_char == 'A') {
+      if (msg_start == true || temp_char == '<' || temp_char == '!') {
         switch (temp_char) {
-          case 'A':
+          case '!':
             autonomous = true;
             return 0;
           case '>':
@@ -102,12 +106,14 @@ int r_recv() {
     delay(20);
     while (Radio.available()) Radio.read();
   }
-  if (temp_char == '\n' && msg_start) Serial.print(r_buf);
+  //if (temp_char == '\n' && msg_start);
+  Serial.print(r_buf);
   return 1;
 }
 
 int l_recv() {
   if (LoRa.parsePacket() == 0) return 0;
+
   int i = 0, j = 0, p = 0;
   bool msg_start = false;
   char p_cont[16];
@@ -116,7 +122,7 @@ int l_recv() {
   memset(&l_payload, 0, sizeof(l_payload));
   while (LoRa.available() && temp_char != '\n') {
     temp_char = LoRa.read();
-    if (msg_start == true || temp_char == '<' || temp_char == 'A') {
+    if (msg_start == true || temp_char == '<' || temp_char == '!') {
        switch (temp_char) {
         case '>':
         case ',':

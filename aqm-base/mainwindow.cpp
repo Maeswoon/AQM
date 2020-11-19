@@ -14,6 +14,8 @@ MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent), ui(new Ui::MainWi
     qc = (char *) malloc(32);
     send_flag = true;
 
+    output = ui->centralwidget->findChild<QLabel *>("output");
+
     timer = new QTimer(this);
     timer->setInterval(REFRESH);
     this->connect(timer, SIGNAL(timeout()), this, SLOT(comm_loop()));

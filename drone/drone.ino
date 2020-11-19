@@ -2,6 +2,7 @@
 #include <Servo.h>
 #include <SPI.h>
 #include "LoRa.h"
+#include "Adafruit_CCS811.h"
 #include <dht11.h>
 #include <math.h>
 
@@ -17,18 +18,19 @@
 #define AIL_OFFSET 90
 #define ELEV_OFFSET 90
 #define ROLL_OFFSET 0
-#define PITCH_OFFSET 0
+#define PITCalt_OFFSET 0
 
-const int MPU6050_addr=0x68;
+const int MPU6050_addr = 0x68;
 int16_t AccX,AccY,AccZ,Temp,GyroX,GyroY,GyroZ;
 double gX, gY, gZ, roll, pitch, sR, sP, r_defl, p_defl;
-double d_curr, d_exp, h_curr, h_exp;
+double d_curr, d_exp, alt_curr, alt_exp, lat, lon;
 double rS[] = {0.0, 0.0, 0.0};
 double pS[] = {0.0, 0.0, 0.0};
 char r_payload[8][16];
-char r_buf[256];
+char r_buf[256], l_out[128], r_out[128];
 int k = 0, r_exp, p_exp;    
 dht11 DHT11;
+Adafruit_CCS811 voc;
 
 Servo l_ail;
 Servo r_ail;
@@ -36,7 +38,6 @@ Servo elev;
 
 char l_addr = '1';
 char dst = '0';  
-char temp_char;
 bool autonomous = false;
 bool debug = true;
 long r, l_t;
@@ -49,8 +50,10 @@ void setup(){
   p_exp = 0;
   d_curr = 0.0;
   d_exp = 0.0;
-  h_curr = 10.0;
-  h_exp = 0.0;
+  alt_curr = 10.0;
+  alt_exp = 0.0;
+  lat = 0.0;
+  lon = 0.0;
   
   Wire.begin();
   Wire.beginTransmission(MPU6050_addr);
@@ -72,6 +75,8 @@ void setup(){
   Wire.write(x);      
   Wire.endTransmission();
 
+  voc.begin();
+
   if (!LoRa.begin(915E6)) {
     while (1);
   }
@@ -79,7 +84,7 @@ void setup(){
   pinMode(s_pin, OUTPUT);
   digitalWrite(s_pin, LOW);
   delay(100);
-  Serial.begin(9600);
+  Serial.begin(115200);
   Radio.begin(9600, SERIAL_8N1);
   delay(100);
   Radio.println("AT+P8");
@@ -91,7 +96,7 @@ void setup(){
 }
 
 void loop(){
-  while (!Radio.available()) {
+  while ((!autonomous && !Radio.available()) || (autonomous && millis() - l_t < LORA_TIMEOUT)) {
     DHT11.read(dht_pin);
     Wire.beginTransmission(MPU6050_addr);
     Wire.write(0x3B);
@@ -124,7 +129,7 @@ void loop(){
 
     if (autonomous) {
       r_exp = MAX_ROLL * pow(sin((d_curr - d_exp) * 0.1), 2) + ROLL_OFFSET;
-      p_exp = MAX_PITCH * pow(sin((h_curr - h_exp) * 0.2), 2) + PITCH_OFFSET;
+      p_exp = MAX_PITCH * pow(sin((alt_curr - alt_exp) * 0.2), 2) + PITCalt_OFFSET;
     }
 
     r_defl = MAX_RDEFL * pow(sin(sR * (M_PI / 180.0)), 2) * sR / abs(sR);
@@ -146,16 +151,19 @@ void loop(){
       Serial.print("\t");
       Serial.print("p_defl: ");
       Serial.print((int) p_defl - p_exp + ELEV_OFFSET);
-      Serial.println("\t");
+      Serial.print("\t");
+      Serial.print("auto: ");
+      Serial.println(autonomous ? "true" : "false");
     }
   }
   
   if (!autonomous && r_recv() > 0)  {
+    
     Radio.write("<");
     Radio.write(dst);
     Radio.write(",");
     Radio.write(l_addr);
-    Radio.write(",");
+    Radio.write(",1,");
     Radio.print((int) sP);
     Radio.write(",");
     Radio.print((int) sR);
@@ -163,16 +171,19 @@ void loop(){
     Radio.write('\n');
   }
   
-  if (millis() - l_t > LORA_TIMEOUT %% autonomous) {
+  if (autonomous && voc.available()) {
+    voc.readData();
+    memset(&l_out, 0, sizeof(l_out));
+    sprintf(l_out, "<%d,%d,4,%.8f,%.8f,%d,%d,%d,%d,%d>\n", dst, l_addr, lat, lon, 
+            (int) alt_curr, (int) DHT11.temperature, (int) DHT11.humidity,
+            (int) voc.geteCO2(), (int) voc.getTVOC());
+    
+    Serial.println("Starting packet...");
     LoRa.beginPacket();
-    LoRa.print("<");
-    LoRa.print(l_addr);
-    LoRa.print(",");
-    LoRa.print(temp);
-    LoRa.print(",");
-    LoRa.print(DHT11.humidity);
-    LoRa.print(">");
+    LoRa.print(l_out);
     LoRa.endPacket();
+    Serial.println("Packet sent.");
+    l_t = millis();
   }
   
 }
@@ -192,13 +203,16 @@ int r_recv() {
   memset(&r_buf, 0, sizeof(r_buf));
   memset(&r_payload, 0, sizeof(r_payload));
   r = millis();
+  bool msg_start = false;
+  char temp_char = '0';
   while (temp_char != '\n' && millis() - r < RECV_TIMEOUT) {
     if (Radio.available()) {
       temp_char = Radio.read();
-      if (msg_start == true || temp_char == '<' || temp_char == 'A') {
+      if (msg_start == true || temp_char == '<' || temp_char == '!') {
         switch (temp_char) {
-          case 'A':
+          case '!':
             autonomous = true;
+            Radio.write("!");
             return 0;
           case '>':
           case ',':
@@ -226,6 +240,7 @@ int r_recv() {
       }
     }
   }
+  Serial.println(r_buf);
   while (Radio.available()) Radio.read();
   if (millis() - r >= RECV_TIMEOUT) return 0;
   return 1;
